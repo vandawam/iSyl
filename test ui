@@ -4135,13 +4135,23 @@ ElementsTable.Dropdown = (function()
             local itemHeight = 32
             local padding = 3
             local innerMargins = 10
+            local searchBarHeight = Dropdown.Search and 38 or 0 -- Add search bar height if search is enabled
+            
             local estimatedContent = (totalCount > 0) and (totalCount * itemHeight + (totalCount - 1) * padding + innerMargins) or innerMargins
             local maxHeight = 392
             local many = totalCount > 10
-            local targetHeight = math.min(estimatedContent, maxHeight)
+            
+            -- Add search bar height to total height
+            local targetHeight = math.min(estimatedContent + searchBarHeight, maxHeight)
+            
+            -- Set minimum height to accommodate search bar + at least one item
+            local minHeight = searchBarHeight + itemHeight + innerMargins
+            targetHeight = math.max(targetHeight, minHeight)
+            
             DropdownHolderCanvas.Size = UDim2.fromOffset(ListSizeX, targetHeight)
             DropdownHolderFrame.Size = UDim2.fromScale(1, many and 0.6 or 1)
         end
+
 
         local function RecalculateCanvasSize()
             DropdownScrollFrame.CanvasSize = UDim2.fromOffset(0, DropdownListLayout.AbsoluteContentSize.Y)
