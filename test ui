@@ -4134,25 +4134,31 @@ ElementsTable.Dropdown = (function()
             local totalCount = #Dropdown.Values
             local itemHeight = 32
             local padding = 3
-            local innerMargins = 10
-            local searchBarHeight = Dropdown.Search and 38 or 0 -- Add search bar height if search is enabled
+            local topMargin = 5
+            local bottomMargin = 5
+            local searchBarHeight = Dropdown.Search and 38 or 0
             
-            local estimatedContent = (totalCount > 0) and (totalCount * itemHeight + (totalCount - 1) * padding + innerMargins) or innerMargins
+            -- Calculate visible items count
+            local visibleCount = 0
+            for _, element in next, DropdownScrollFrame:GetChildren() do
+                if not element:IsA("UIListLayout") and element.Visible then
+                    visibleCount = visibleCount + 1
+                end
+            end
+            
+            -- Use visible count if available, otherwise use total count
+            local itemCount = visibleCount > 0 and visibleCount or totalCount
+            
+            local estimatedContent = (itemCount > 0) and (itemCount * itemHeight + math.max(0, itemCount - 1) * padding) or 0
             local maxHeight = 392
             local many = totalCount > 10
             
-            -- Add search bar height to total height
-            local targetHeight = math.min(estimatedContent + searchBarHeight, maxHeight)
+            -- Calculate target height with proper margins
+            local contentHeight = searchBarHeight + topMargin + estimatedContent + bottomMargin
+            local targetHeight = math.min(contentHeight, maxHeight)
             
-            -- Set minimum height based on whether search is enabled
-            local minHeight
-            if Dropdown.Search then
-                -- With search: accommodate search bar + at least 3 items with proper spacing
-                minHeight = searchBarHeight + (itemHeight * 3) + (padding * 3) + (innerMargins * 2)
-            else
-                -- Without search: accommodate at least 2 full items with proper spacing
-                minHeight = (itemHeight * 2) + padding + (innerMargins * 2)
-            end
+            -- Ensure minimum height shows at least 1 full item properly
+            local minHeight = searchBarHeight + topMargin + itemHeight + bottomMargin + 10
             targetHeight = math.max(targetHeight, minHeight)
             
             DropdownHolderCanvas.Size = UDim2.fromOffset(ListSizeX, targetHeight)
