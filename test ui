@@ -4145,7 +4145,7 @@ ElementsTable.Dropdown = (function()
             local targetHeight = math.min(estimatedContent + searchBarHeight, maxHeight)
             
             -- Set minimum height to accommodate search bar + multiple items
-            local minHeight = searchBarHeight + (itemHeight * 3) + (padding * 2) + innerMargins
+            local minHeight = searchBarHeight + (itemHeight * 10) + (padding * 2) + innerMargins
             targetHeight = math.max(targetHeight, minHeight)
             
             DropdownHolderCanvas.Size = UDim2.fromOffset(ListSizeX, targetHeight)
