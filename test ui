@@ -3895,17 +3895,17 @@ ElementsTable.Dropdown = (function()
     local New = Creator.New
 
     function Element:New(Idx, Config)
-
         local Dropdown = {
             Values = Config.Values,
             Value = Config.Default,
             Multi = Config.Multi,
-            Buttons = {}, -- Cache untuk object button
+            Buttons = {},
             Opened = false,
             Type = "Dropdown",
             Callback = Config.Callback or function() end,
             Search = Config.Search,
-            KeepSearch = Config.KeepSearch == true
+            KeepSearch = Config.KeepSearch == true,
+            LoadToken = 0, -- Token untuk menghandle async loading
         }
 
         if Dropdown.Multi and Config.AllowNull then
@@ -3933,9 +3933,7 @@ ElementsTable.Dropdown = (function()
             AnchorPoint = Vector2.new(0, 0.5),
             BackgroundTransparency = 1,
             TextTruncate = Enum.TextTruncate.AtEnd,
-            ThemeTag = {
-                TextColor3 = "Text",
-            },
+            ThemeTag = { TextColor3 = "Text" },
         })
 
         local DropdownIco = New("ImageLabel", {
@@ -3945,9 +3943,7 @@ ElementsTable.Dropdown = (function()
             Position = UDim2.new(1, -8, 0.5, 0),
             BackgroundTransparency = 1,
             Rotation = 180,
-            ThemeTag = {
-                ImageColor3 = "SubText",
-            },
+            ThemeTag = { ImageColor3 = "SubText" },
         })
 
         local DropdownInner = New("TextButton", {
@@ -3956,27 +3952,15 @@ ElementsTable.Dropdown = (function()
             AnchorPoint = Vector2.new(1, 0.5),
             BackgroundTransparency = 0.9,
             Parent = DropdownFrame.Frame,
-            ThemeTag = {
-                BackgroundColor3 = "DropdownFrame",
-            },
+            ThemeTag = { BackgroundColor3 = "DropdownFrame" },
         }, {
-            New("UICorner", {
-                CornerRadius = UDim.new(0, 5),
-            }),
-            New("UIStroke", {
-                Transparency = 0.5,
-                ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-                ThemeTag = {
-                    Color = "InElementBorder",
-                },
-            }),
+            New("UICorner", { CornerRadius = UDim.new(0, 5) }),
+            New("UIStroke", { Transparency = 0.5, ApplyStrokeMode = Enum.ApplyStrokeMode.Border, ThemeTag = { Color = "InElementBorder" } }),
             DropdownIco,
             DropdownDisplay,
         })
 
-        local DropdownListLayout = New("UIListLayout", {
-            Padding = UDim.new(0, 3),
-        })
+        local DropdownListLayout = New("UIListLayout", { Padding = UDim.new(0, 3) })
 
         local DropdownScrollFrame = New("ScrollingFrame", {
             Size = UDim2.new(1, -5, 1, -10),
@@ -3992,12 +3976,11 @@ ElementsTable.Dropdown = (function()
             CanvasSize = UDim2.fromScale(0, 0),
             AutomaticCanvasSize = Enum.AutomaticSize.Y,
             ScrollingDirection = Enum.ScrollingDirection.Y,
-        }, {
-            DropdownListLayout,
-        })
+        }, { DropdownListLayout })
 
-        local SearchBar
-        local SearchBox
+        local SearchBar, SearchBox
+        local RecalculateCanvasSize, RecalculateListSize -- Forward declaration
+
         if Dropdown.Search then
             SearchBar = New("Frame", {
                 Size = UDim2.new(1, -10, 0, 28),
@@ -4054,20 +4037,36 @@ ElementsTable.Dropdown = (function()
             DropdownScrollFrame.Position = UDim2.fromOffset(5, 38)
             DropdownScrollFrame.Size = UDim2.new(1, -10, 1, -43)
 
-            local filterToken = 0
+            -- OPTIMIZED SEARCH FILTER (ASYNC)
             local function ApplyFilter()
-                filterToken += 1
-                local myToken = filterToken
-                task.delay(0.03, function()
-                    if myToken ~= filterToken then return end
-                    local text = (SearchBox.Text or ""):lower()
-                    for _, element in next, DropdownScrollFrame:GetChildren() do
+                Dropdown.LoadToken = Dropdown.LoadToken + 1
+                local myToken = Dropdown.LoadToken
+                
+                local text = (SearchBox.Text or ""):lower()
+                local items = DropdownScrollFrame:GetChildren()
+                
+                task.spawn(function()
+                    local count = 0
+                    for _, element in next, items do
+                        if myToken ~= Dropdown.LoadToken then return end -- Cancel if new input
+                        
                         if not element:IsA("UIListLayout") then
                             local value = element:FindFirstChild("ButtonLabel") and element.ButtonLabel.Text or ""
-                            element.Visible = text == "" or value:lower():find(text, 1, true) ~= nil
+                            local isMatch = text == "" or value:lower():find(text, 1, true) ~= nil
+                            element.Visible = isMatch
+                            
+                            -- Yield every 100 items checked to prevent freeze
+                            count = count + 1
+                            if count % 100 == 0 then 
+                                task.wait() 
+                            end
                         end
                     end
-                    -- Recalculate called by signals below
+                    
+                    if myToken == Dropdown.LoadToken then
+                        RecalculateCanvasSize()
+                        RecalculateListSize()
+                    end
                 end)
             end
 
@@ -4076,21 +4075,12 @@ ElementsTable.Dropdown = (function()
 
         local DropdownHolderFrame = New("Frame", {
             Size = UDim2.fromScale(1, 0.6),
-            ThemeTag = {
-                BackgroundColor3 = "DropdownHolder",
-            },
+            ThemeTag = { BackgroundColor3 = "DropdownHolder" },
         }, {
             SearchBar,
             DropdownScrollFrame,
-            New("UICorner", {
-                CornerRadius = UDim.new(0, 7),
-            }),
-            New("UIStroke", {
-                ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-                ThemeTag = {
-                    Color = "DropdownBorder",
-                },
-            }),
+            New("UICorner", { CornerRadius = UDim.new(0, 7) }),
+            New("UIStroke", { ApplyStrokeMode = Enum.ApplyStrokeMode.Border, ThemeTag = { Color = "DropdownBorder" } }),
             New("ImageLabel", {
                 BackgroundTransparency = 1,
                 Image = "http://www.roblox.com/asset/?id=5554236805",
@@ -4110,35 +4100,26 @@ ElementsTable.Dropdown = (function()
             Visible = false,
         }, {
             DropdownHolderFrame,
-            New("UISizeConstraint", {
-                MinSize = Vector2.new(170, 0),
-            }),
+            New("UISizeConstraint", { MinSize = Vector2.new(170, 0) }),
         })
         table.insert(Library.OpenFrames, DropdownHolderCanvas)
 
         local function RecalculateListPosition()
             local Add = -40
             if Camera.ViewportSize.Y - DropdownInner.AbsolutePosition.Y < DropdownHolderCanvas.AbsoluteSize.Y - 5 then
-                Add = DropdownHolderCanvas.AbsoluteSize.Y
-                - 5
-                - (Camera.ViewportSize.Y - DropdownInner.AbsolutePosition.Y)
-                    + 40
+                Add = DropdownHolderCanvas.AbsoluteSize.Y - 5 - (Camera.ViewportSize.Y - DropdownInner.AbsolutePosition.Y) + 40
             end
-            DropdownHolderCanvas.Position =
-                UDim2.fromOffset(DropdownInner.AbsolutePosition.X - 1, DropdownInner.AbsolutePosition.Y - 5 - Add)
+            DropdownHolderCanvas.Position = UDim2.fromOffset(DropdownInner.AbsolutePosition.X - 1, DropdownInner.AbsolutePosition.Y - 5 - Add)
         end
 
         local ListSizeX = 0
-        local function RecalculateListSize()
+        function RecalculateListSize()
             local totalCount = 0
             local visibleCount = 0
-            
             for _, element in next, DropdownScrollFrame:GetChildren() do
                 if not element:IsA("UIListLayout") then
                     totalCount = totalCount + 1
-                    if element.Visible then
-                        visibleCount = visibleCount + 1
-                    end
+                    if element.Visible then visibleCount = visibleCount + 1 end
                 end
             end
             
@@ -4146,23 +4127,19 @@ ElementsTable.Dropdown = (function()
             local padding = 3
             local searchBarHeight = Dropdown.Search and 38 or 0
             local topBottomMargin = 10
-            
             local itemsToShow = math.max(visibleCount, 1)
             local contentHeight = itemsToShow * itemHeight + math.max(0, itemsToShow - 1) * padding
-            
             local totalHeight = searchBarHeight + contentHeight + topBottomMargin
-            
             local minHeight = searchBarHeight + itemHeight + topBottomMargin + 20
             local maxHeight = 392
             local targetHeight = math.clamp(totalHeight, minHeight, maxHeight)
-            
             local many = totalCount > 10
             
             DropdownHolderCanvas.Size = UDim2.fromOffset(ListSizeX, targetHeight)
             DropdownHolderFrame.Size = UDim2.fromScale(1, many and 0.6 or 1)
         end
 
-        local function RecalculateCanvasSize()
+        function RecalculateCanvasSize()
             DropdownScrollFrame.CanvasSize = UDim2.fromOffset(0, DropdownListLayout.AbsoluteContentSize.Y)
         end
 
@@ -4177,45 +4154,21 @@ ElementsTable.Dropdown = (function()
         end)
 
         Creator.AddSignal(DropdownInner.MouseButton1Click, function()
-            if Dropdown.Opened then
-                Dropdown:Close()
-                return
-            end
+            if Dropdown.Opened then Dropdown:Close() return end
             Dropdown:Open()
         end)
 
         Creator.AddSignal(DropdownInner.InputBegan, function(Input)
             if Input.UserInputType == Enum.UserInputType.Touch then
-                if Dropdown.Opened then
-                    Dropdown:Close()
-                    return
-                end
+                if Dropdown.Opened then Dropdown:Close() return end
                 Dropdown:Open()
             end
         end)
 
-        Creator.AddSignal(DropdownDisplay:GetPropertyChangedSignal("Text"), function()
-            for _, Element in next, DropdownScrollFrame:GetChildren() do
-                if not Element:IsA("UIListLayout") then
-                    Element.Visible = true
-                end
-            end
-            RecalculateListPosition()
-            RecalculateListSize()
-        end)
-
         Creator.AddSignal(UserInputService.InputBegan, function(Input)
-            if
-                Input.UserInputType == Enum.UserInputType.MouseButton1
-                or Input.UserInputType == Enum.UserInputType.Touch
-            then
+            if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
                 local AbsPos, AbsSize = DropdownHolderFrame.AbsolutePosition, DropdownHolderFrame.AbsoluteSize
-                if
-                    Mouse.X < AbsPos.X
-                    or Mouse.X > AbsPos.X + AbsSize.X
-                    or Mouse.Y < (AbsPos.Y - 20 - 1)
-                    or Mouse.Y > AbsPos.Y + AbsSize.Y
-                then
+                if Mouse.X < AbsPos.X or Mouse.X > AbsPos.X + AbsSize.X or Mouse.Y < (AbsPos.Y - 20 - 1) or Mouse.Y > AbsPos.Y + AbsSize.Y then
                     Dropdown:Close()
                 end
             end
@@ -4224,67 +4177,43 @@ ElementsTable.Dropdown = (function()
         function Dropdown:Open()
             Dropdown.Opened = true
             for _, frame in ipairs(Library.OpenFrames) do
-                if frame ~= DropdownHolderCanvas and frame.Visible then
-                    frame.Visible = false
-                end
+                if frame ~= DropdownHolderCanvas and frame.Visible then frame.Visible = false end
             end
-            if SearchBox and not Dropdown.KeepSearch then
-                SearchBox.Text = ""
-            end
+            if SearchBox and not Dropdown.KeepSearch then SearchBox.Text = "" end
             DropdownHolderCanvas.Visible = true
-            TweenService:Create(
-                DropdownHolderFrame,
-                TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
-                { Size = UDim2.fromScale(1, 0.6) }
-            ):Play()
-            TweenService:Create(
-                DropdownIco,
-                TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
-                { Rotation = 0 }
-            ):Play()
+            TweenService:Create(DropdownHolderFrame, TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), { Size = UDim2.fromScale(1, 0.6) }):Play()
+            TweenService:Create(DropdownIco, TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), { Rotation = 0 }):Play()
         end
 
         function Dropdown:Close()
             Dropdown.Opened = false
             DropdownHolderFrame.Size = UDim2.fromScale(1, 0.6)
             DropdownHolderCanvas.Visible = false
-            TweenService:Create(
-                DropdownIco,
-                TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
-                { Rotation = 180 }
-            ):Play()
+            TweenService:Create(DropdownIco, TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), { Rotation = 180 }):Play()
             Dropdown:Display()
             for _, element in next, DropdownScrollFrame:GetChildren() do
-                if not element:IsA("UIListLayout") then
-                    element.Visible = true
-                end
+                if not element:IsA("UIListLayout") then element.Visible = true end
             end
         end
 
         function Dropdown:Display()
             local Values = Dropdown.Values
             local Str = ""
-
             if Config.Multi then
                 for Idx, Value in next, Values do
-                    if Dropdown.Value[Value] then
-                        Str = Str .. Value .. ", "
-                    end
+                    if Dropdown.Value[Value] then Str = Str .. Value .. ", " end
                 end
                 Str = Str:sub(1, #Str - 2)
             else
                 Str = Dropdown.Value or ""
             end
-
             DropdownDisplay.Text = (Str == "" and "--" or Str)
         end
 
         function Dropdown:GetActiveValues()
             if Config.Multi then
                 local T = {}
-                for Value, Bool in next, Dropdown.Value do
-                    table.insert(T, Value)
-                end
+                for Value, Bool in next, Dropdown.Value do table.insert(T, Value) end
                 return T
             else
                 return Dropdown.Value and 1 or 0
@@ -4295,177 +4224,128 @@ ElementsTable.Dropdown = (function()
             Dropdown.Value = Value
             Library:SafeCallback(Dropdown.Callback, Dropdown.Value)
             Library:SafeCallback(Dropdown.Changed, Dropdown.Value)
-            
-            -- Update UI for active buttons
             for _, ButtonTable in pairs(Dropdown.Buttons) do
                 ButtonTable:UpdateButton()
             end
             Dropdown:Display()
         end
 
-        -- OPTIMIZED BUILD FUNCTION
+        -- ==== SUPER OPTIMIZED ASYNC BUILDER ====
         function Dropdown:BuildDropdownList()
+            -- Increment Token to invalid previous active building threads
+            Dropdown.LoadToken = Dropdown.LoadToken + 1
+            local MyToken = Dropdown.LoadToken
+
             local Values = Dropdown.Values
             
-            -- Clean up buttons that are NOT in the new Values list
+            -- 1. Fast Cleanup: Mark old buttons
+            local ButtonsToKeep = {}
+            for _, Val in ipairs(Values) do
+                ButtonsToKeep[Val] = true
+            end
+
+            -- Destroy unused buttons (Standard loop is fine here usually)
             for Value, ButtonTable in pairs(Dropdown.Buttons) do
-                if not table.find(Values, Value) then
+                if not ButtonsToKeep[Value] then
                     ButtonTable.Instance:Destroy()
                     Dropdown.Buttons[Value] = nil
                 end
             end
 
-            -- Create new buttons only if they don't exist
-            for Idx, Value in next, Values do
-                if Dropdown.Buttons[Value] then continue end -- Skip if already exists!
-
-                local Table = {}
+            -- 2. Async Creation
+            task.spawn(function()
+                local processedCount = 0
                 
-                local ButtonSelector = New("Frame", {
-                    Size = UDim2.fromOffset(4, 14),
-                    BackgroundColor3 = Color3.fromRGB(76, 194, 255),
-                    Position = UDim2.fromOffset(-1, 16),
-                    AnchorPoint = Vector2.new(0, 0.5),
-                    ThemeTag = {
-                        BackgroundColor3 = "Accent",
-                    },
-                }, {
-                    New("UICorner", {
-                        CornerRadius = UDim.new(0, 2),
-                    }),
-                })
+                for _, Value in ipairs(Values) do
+                    -- Cancel this thread if a new build request started
+                    if MyToken ~= Dropdown.LoadToken then return end
 
-                local ButtonLabel = New("TextLabel", {
-                    FontFace = Font.new("rbxasset://fonts/families/GothamSSm.json"),
-                    Text = Value,
-                    TextColor3 = Color3.fromRGB(200, 200, 200),
-                    TextSize = 13,
-                    TextXAlignment = Enum.TextXAlignment.Left,
-                    BackgroundColor3 = Color3.fromRGB(255, 255, 255),
-                    AutomaticSize = Enum.AutomaticSize.Y,
-                    BackgroundTransparency = 1,
-                    Size = UDim2.fromScale(1, 1),
-                    Position = UDim2.fromOffset(10, 0),
-                    Name = "ButtonLabel",
-                    ThemeTag = {
-                        TextColor3 = "Text",
-                    },
-                })
-
-                local Button = New("TextButton", {
-                    Name = Value, -- Name it for debugging
-                    Size = UDim2.new(1, -5, 0, 32),
-                    BackgroundTransparency = 1,
-                    ZIndex = 23,
-                    Text = "",
-                    Parent = DropdownScrollFrame,
-                    ThemeTag = {
-                        BackgroundColor3 = "DropdownOption",
-                    },
-                }, {
-                    ButtonSelector,
-                    ButtonLabel,
-                    New("UICorner", {
-                        CornerRadius = UDim.new(0, 6),
-                    }),
-                })
-
-                local Selected
-
-                if Config.Multi then
-                    Selected = Dropdown.Value[Value]
-                else
-                    Selected = Dropdown.Value == Value
-                end
-
-                local BackMotor, SetBackTransparency = Creator.SpringMotor(1, Button, "BackgroundTransparency")
-                local SelMotor, SetSelTransparency = Creator.SpringMotor(1, ButtonSelector, "BackgroundTransparency")
-                local SelectorSizeMotor = Flipper.SingleMotor.new(6)
-
-                SelectorSizeMotor:onStep(function(value)
-                    ButtonSelector.Size = UDim2.new(0, 4, 0, value)
-                end)
-
-                Creator.AddSignal(Button.MouseEnter, function()
-                    SetBackTransparency(Selected and 0.85 or 0.89)
-                end)
-                Creator.AddSignal(Button.MouseLeave, function()
-                    SetBackTransparency(Selected and 0.89 or 1)
-                end)
-                Creator.AddSignal(Button.MouseButton1Down, function()
-                    SetBackTransparency(0.92)
-                end)
-                Creator.AddSignal(Button.MouseButton1Up, function()
-                    SetBackTransparency(Selected and 0.85 or 0.89)
-                end)
-
-                function Table:UpdateButton()
-                    if Config.Multi then
-                        Selected = Dropdown.Value[Value]
-                        if Selected then
-                            SetBackTransparency(0.89)
-                        end
-                    else
-                        Selected = Dropdown.Value == Value
-                        SetBackTransparency(Selected and 0.89 or 1)
+                    -- Skip if button already exists
+                    if Dropdown.Buttons[Value] then 
+                        processedCount = processedCount + 1
+                        continue 
                     end
 
-                    SelectorSizeMotor:setGoal(Flipper.Spring.new(Selected and 14 or 6, { frequency = 6 }))
-                    SetSelTransparency(Selected and 0 or 1)
-                end
+                    -- Create Button
+                    local Table = {}
+                    local ButtonSelector = New("Frame", { Size = UDim2.fromOffset(4, 14), BackgroundColor3 = Color3.fromRGB(76, 194, 255), Position = UDim2.fromOffset(-1, 16), AnchorPoint = Vector2.new(0, 0.5), ThemeTag = { BackgroundColor3 = "Accent" } }, { New("UICorner", { CornerRadius = UDim.new(0, 2) }) })
+                    local ButtonLabel = New("TextLabel", { FontFace = Font.new("rbxasset://fonts/families/GothamSSm.json"), Text = Value, TextColor3 = Color3.fromRGB(200, 200, 200), TextSize = 13, TextXAlignment = Enum.TextXAlignment.Left, BackgroundColor3 = Color3.fromRGB(255, 255, 255), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), Position = UDim2.fromOffset(10, 0), Name = "ButtonLabel", ThemeTag = { TextColor3 = "Text" } })
+                    local Button = New("TextButton", { Name = Value, Size = UDim2.new(1, -5, 0, 32), BackgroundTransparency = 1, ZIndex = 23, Text = "", Parent = DropdownScrollFrame, ThemeTag = { BackgroundColor3 = "DropdownOption" } }, { ButtonSelector, ButtonLabel, New("UICorner", { CornerRadius = UDim.new(0, 6) }) })
 
-                Creator.AddSignal(Button.Activated, function()
-                    local Try = not Selected
+                    local Selected = Config.Multi and Dropdown.Value[Value] or (Dropdown.Value == Value)
+                    local BackMotor, SetBackTransparency = Creator.SpringMotor(1, Button, "BackgroundTransparency")
+                    local SelMotor, SetSelTransparency = Creator.SpringMotor(1, ButtonSelector, "BackgroundTransparency")
+                    local SelectorSizeMotor = Flipper.SingleMotor.new(6)
 
-                    if Dropdown:GetActiveValues() == 1 and not Try and not Config.AllowNull then
-                    else
+                    SelectorSizeMotor:onStep(function(value) ButtonSelector.Size = UDim2.new(0, 4, 0, value) end)
+                    Creator.AddSignal(Button.MouseEnter, function() SetBackTransparency(Selected and 0.85 or 0.89) end)
+                    Creator.AddSignal(Button.MouseLeave, function() SetBackTransparency(Selected and 0.89 or 1) end)
+                    Creator.AddSignal(Button.MouseButton1Down, function() SetBackTransparency(0.92) end)
+                    Creator.AddSignal(Button.MouseButton1Up, function() SetBackTransparency(Selected and 0.85 or 0.89) end)
+
+                    function Table:UpdateButton()
                         if Config.Multi then
-                            Selected = Try
-                            Dropdown.Value[Value] = Selected and true or nil
+                            Selected = Dropdown.Value[Value]
+                            if Selected then SetBackTransparency(0.89) end
                         else
-                            Selected = Try
-                            Dropdown.Value = Selected and Value or nil
-
-                            for _, OtherButton in pairs(Dropdown.Buttons) do
-                                OtherButton:UpdateButton()
-                            end
+                            Selected = Dropdown.Value == Value
+                            SetBackTransparency(Selected and 0.89 or 1)
                         end
-
-                        Table:UpdateButton()
-                        Dropdown:Display()
-
-                        Library:SafeCallback(Dropdown.Callback, Dropdown.Value)
-                        Library:SafeCallback(Dropdown.Changed, Dropdown.Value)
+                        SelectorSizeMotor:setGoal(Flipper.Spring.new(Selected and 14 or 6, { frequency = 6 }))
+                        SetSelTransparency(Selected and 0 or 1)
                     end
-                end)
 
-                Table:UpdateButton()
-                
-                -- Cache the button
-                Table.Instance = Button
-                Dropdown.Buttons[Value] = Table
-            end
+                    Creator.AddSignal(Button.Activated, function()
+                        local Try = not Selected
+                        if Dropdown:GetActiveValues() == 1 and not Try and not Config.AllowNull then else
+                            if Config.Multi then
+                                Selected = Try
+                                Dropdown.Value[Value] = Selected and true or nil
+                            else
+                                Selected = Try
+                                Dropdown.Value = Selected and Value or nil
+                                for _, OtherButton in pairs(Dropdown.Buttons) do OtherButton:UpdateButton() end
+                            end
+                            Table:UpdateButton()
+                            Dropdown:Display()
+                            Library:SafeCallback(Dropdown.Callback, Dropdown.Value)
+                            Library:SafeCallback(Dropdown.Changed, Dropdown.Value)
+                        end
+                    end)
 
-            -- Recalculate Width
-            ListSizeX = 0
-            for _, Table in pairs(Dropdown.Buttons) do
-                local Button = Table.Instance
-                if Button and Button.ButtonLabel then
-                    if Button.ButtonLabel.TextBounds.X > ListSizeX then
-                        ListSizeX = Button.ButtonLabel.TextBounds.X
+                    Table:UpdateButton()
+                    Table.Instance = Button
+                    Dropdown.Buttons[Value] = Table
+                    
+                    -- Anti-Freeze Logic:
+                    processedCount = processedCount + 1
+                    -- Every 30 buttons created, yield for 1 frame to let game render
+                    if processedCount % 30 == 0 then
+                        RecalculateCanvasSize() -- Update scrollbar dynamically so user can see list growing
+                        task.wait() 
                     end
                 end
-            end
-            ListSizeX = ListSizeX + 30
-
-            RecalculateCanvasSize()
-            RecalculateListSize()
+                
+                -- Final Calculation
+                if MyToken == Dropdown.LoadToken then
+                    -- Calc width
+                    ListSizeX = 0
+                    for _, Table in pairs(Dropdown.Buttons) do
+                        local b = Table.Instance
+                        if b and b.ButtonLabel and b.ButtonLabel.TextBounds.X > ListSizeX then
+                            ListSizeX = b.ButtonLabel.TextBounds.X
+                        end
+                    end
+                    ListSizeX = ListSizeX + 30
+                    
+                    RecalculateCanvasSize()
+                    RecalculateListSize()
+                end
+            end)
         end
 
         function Dropdown:SetValues(NewValues)
-            if NewValues then
-                Dropdown.Values = NewValues
-            end
+            if NewValues then Dropdown.Values = NewValues end
             Dropdown:BuildDropdownList()
         end
 
@@ -4478,24 +4358,14 @@ ElementsTable.Dropdown = (function()
             if Dropdown.Multi then
                 local nTable = {}
                 for Value, Bool in next, Val do
-                    if table.find(Dropdown.Values, Value) then
-                        nTable[Value] = true
-                    end
+                    if table.find(Dropdown.Values, Value) then nTable[Value] = true end
                 end
                 Dropdown.Value = nTable
             else
-                if not Val then
-                    Dropdown.Value = nil
-                elseif table.find(Dropdown.Values, Val) then
-                    Dropdown.Value = Val
-                end
+                if not Val then Dropdown.Value = nil
+                elseif table.find(Dropdown.Values, Val) then Dropdown.Value = Val end
             end
-            
-            -- Update UI
-            for _, ButtonTable in pairs(Dropdown.Buttons) do
-                ButtonTable:UpdateButton()
-            end
-            
+            for _, ButtonTable in pairs(Dropdown.Buttons) do ButtonTable:UpdateButton() end
             Library:SafeCallback(Dropdown.Callback, Dropdown.Value)
             Library:SafeCallback(Dropdown.Changed, Dropdown.Value)
         end
@@ -4508,46 +4378,32 @@ ElementsTable.Dropdown = (function()
         Dropdown:BuildDropdownList()
         Dropdown:Display()
 
+        -- Default Logic
         local Defaults = {}
-
         if type(Config.Default) == "string" then
             local Idx = table.find(Dropdown.Values, Config.Default)
-            if Idx then
-                table.insert(Defaults, Idx)
-            end
+            if Idx then table.insert(Defaults, Idx) end
         elseif type(Config.Default) == "table" then
             for _, Value in next, Config.Default do
                 local Idx = table.find(Dropdown.Values, Value)
-                if Idx then
-                    table.insert(Defaults, Idx)
-                end
+                if Idx then table.insert(Defaults, Idx) end
             end
         elseif type(Config.Default) == "number" and Dropdown.Values[Config.Default] ~= nil then
             table.insert(Defaults, Config.Default)
         end
-
         if next(Defaults) then
             for i = 1, #Defaults do
                 local Index = Defaults[i]
-                if Config.Multi then
-                    Dropdown.Value[Dropdown.Values[Index]] = true
-                else
-                    Dropdown.Value = Dropdown.Values[Index]
-                end
+                if Config.Multi then Dropdown.Value[Dropdown.Values[Index]] = true else Dropdown.Value = Dropdown.Values[Index] end
                 if not Config.Multi then break end
             end
-            
-            -- Update buttons after defaults are set
-            for _, ButtonTable in pairs(Dropdown.Buttons) do
-                ButtonTable:UpdateButton()
-            end
+            for _, ButtonTable in pairs(Dropdown.Buttons) do ButtonTable:UpdateButton() end
             Dropdown:Display()
         end
 
         Library.Options[Idx] = Dropdown
         return Dropdown
     end
-
     return Element
 end)()
 ElementsTable.Paragraph = (function()
