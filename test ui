@@ -3894,6 +3894,12 @@ ElementsTable.Dropdown = (function()
     Element.__type = "Dropdown"
     local New = Creator.New
 
+    -- KONFIGURASI KECEPATAN LOAD
+    -- Semakin kecil angkanya, semakin ringan (tidak lag), tapi loading selesai lebih lama.
+    -- Semakin besar, semakin cepat selesai, tapi bisa bikin freeze sesaat.
+    local BUTTONS_PER_FRAME = 5 
+    local SEARCH_CHECKS_PER_FRAME = 20
+
     function Element:New(Idx, Config)
         local Dropdown = {
             Values = Config.Values,
@@ -3905,7 +3911,7 @@ ElementsTable.Dropdown = (function()
             Callback = Config.Callback or function() end,
             Search = Config.Search,
             KeepSearch = Config.KeepSearch == true,
-            LoadToken = 0, -- Token untuk menghandle async loading
+            LoadToken = 0, 
         }
 
         if Dropdown.Multi and Config.AllowNull then
@@ -4048,16 +4054,16 @@ ElementsTable.Dropdown = (function()
                 task.spawn(function()
                     local count = 0
                     for _, element in next, items do
-                        if myToken ~= Dropdown.LoadToken then return end -- Cancel if new input
+                        if myToken ~= Dropdown.LoadToken then return end 
                         
                         if not element:IsA("UIListLayout") then
                             local value = element:FindFirstChild("ButtonLabel") and element.ButtonLabel.Text or ""
                             local isMatch = text == "" or value:lower():find(text, 1, true) ~= nil
                             element.Visible = isMatch
                             
-                            -- Yield every 100 items checked to prevent freeze
+                            -- Jeda setiap 20 pengecekan agar search tidak lag
                             count = count + 1
-                            if count % 100 == 0 then 
+                            if count % SEARCH_CHECKS_PER_FRAME == 0 then 
                                 task.wait() 
                             end
                         end
@@ -4230,21 +4236,19 @@ ElementsTable.Dropdown = (function()
             Dropdown:Display()
         end
 
-        -- ==== SUPER OPTIMIZED ASYNC BUILDER ====
+        -- ==== SUPER OPTIMIZED ASYNC BUILDER (5 BUTTONS PER FRAME) ====
         function Dropdown:BuildDropdownList()
-            -- Increment Token to invalid previous active building threads
+            -- Token System untuk membatalkan load lama jika ada load baru
             Dropdown.LoadToken = Dropdown.LoadToken + 1
             local MyToken = Dropdown.LoadToken
 
             local Values = Dropdown.Values
             
-            -- 1. Fast Cleanup: Mark old buttons
             local ButtonsToKeep = {}
             for _, Val in ipairs(Values) do
                 ButtonsToKeep[Val] = true
             end
 
-            -- Destroy unused buttons (Standard loop is fine here usually)
             for Value, ButtonTable in pairs(Dropdown.Buttons) do
                 if not ButtonsToKeep[Value] then
                     ButtonTable.Instance:Destroy()
@@ -4252,15 +4256,14 @@ ElementsTable.Dropdown = (function()
                 end
             end
 
-            -- 2. Async Creation
             task.spawn(function()
                 local processedCount = 0
                 
                 for _, Value in ipairs(Values) do
-                    -- Cancel this thread if a new build request started
+                    -- Stop jika user menutup/merefresh dropdown lagi
                     if MyToken ~= Dropdown.LoadToken then return end
 
-                    -- Skip if button already exists
+                    -- Skip jika tombol sudah ada
                     if Dropdown.Buttons[Value] then 
                         processedCount = processedCount + 1
                         continue 
@@ -4317,18 +4320,16 @@ ElementsTable.Dropdown = (function()
                     Table.Instance = Button
                     Dropdown.Buttons[Value] = Table
                     
-                    -- Anti-Freeze Logic:
+                    -- LOGIC PENTING: HANYA 5 TOMBOL PER FRAME
                     processedCount = processedCount + 1
-                    -- Every 30 buttons created, yield for 1 frame to let game render
-                    if processedCount % 30 == 0 then
-                        RecalculateCanvasSize() -- Update scrollbar dynamically so user can see list growing
-                        task.wait() 
+                    if processedCount % BUTTONS_PER_FRAME == 0 then
+                        RecalculateCanvasSize() -- Update scrollbar pelan-pelan
+                        task.wait() -- Istirahat 1 frame
                     end
                 end
                 
-                -- Final Calculation
                 if MyToken == Dropdown.LoadToken then
-                    -- Calc width
+                    -- Final Width Calc
                     ListSizeX = 0
                     for _, Table in pairs(Dropdown.Buttons) do
                         local b = Table.Instance
@@ -4378,7 +4379,6 @@ ElementsTable.Dropdown = (function()
         Dropdown:BuildDropdownList()
         Dropdown:Display()
 
-        -- Default Logic
         local Defaults = {}
         if type(Config.Default) == "string" then
             local Idx = table.find(Dropdown.Values, Config.Default)
