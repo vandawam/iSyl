@@ -4052,7 +4052,7 @@ ElementsTable.Dropdown = (function()
             end)
 
             DropdownScrollFrame.Position = UDim2.fromOffset(5, 38)
-            DropdownScrollFrame.Size = UDim2.new(1, -10, 1, -43)
+            DropdownScrollFrame.Size = UDim2.new(1, -5, 1, -43)
 
             local filterToken = 0
             local function ApplyFilter()
@@ -4131,41 +4131,41 @@ ElementsTable.Dropdown = (function()
 
         local ListSizeX = 0
         local function RecalculateListSize()
-            local totalCount = 0
-            local visibleCount = 0
+            local totalCount = #Dropdown.Values
+            local itemHeight = 32
+            local padding = 3
+            local topMargin = 5
+            local bottomMargin = 5
+            local searchBarHeight = Dropdown.Search and 38 or 0
             
-            -- Count total and visible items
+            -- Calculate visible items count
+            local visibleCount = 0
             for _, element in next, DropdownScrollFrame:GetChildren() do
-                if not element:IsA("UIListLayout") then
-                    totalCount = totalCount + 1
-                    if element.Visible then
-                        visibleCount = visibleCount + 1
-                    end
+                if not element:IsA("UIListLayout") and element.Visible then
+                    visibleCount = visibleCount + 1
                 end
             end
             
-            local itemHeight = 32
-            local padding = 3
-            local searchBarHeight = Dropdown.Search and 38 or 0
-            local topBottomMargin = 10
+            -- Use visible count if available, otherwise use total count
+            local itemCount = visibleCount > 0 and visibleCount or totalCount
             
-            -- Calculate content height based on visible items
-            local itemsToShow = math.max(visibleCount, 1)
-            local contentHeight = itemsToShow * itemHeight + math.max(0, itemsToShow - 1) * padding
-            
-            -- Total height including search bar and margins
-            local totalHeight = searchBarHeight + contentHeight + topBottomMargin
-            
-            -- Clamp between min and max
-            local minHeight = searchBarHeight + itemHeight + topBottomMargin + 20
+            local estimatedContent = (itemCount > 0) and (itemCount * itemHeight + math.max(0, itemCount - 1) * padding) or 0
             local maxHeight = 392
-            local targetHeight = math.clamp(totalHeight, minHeight, maxHeight)
-            
             local many = totalCount > 10
+            
+            -- Calculate target height with proper margins
+            local contentHeight = searchBarHeight + topMargin + estimatedContent + bottomMargin
+            local targetHeight = math.min(contentHeight, maxHeight)
+            
+            -- Ensure minimum height shows at least 1 full item properly
+            local minHeight = searchBarHeight + topMargin + itemHeight + bottomMargin + 10
+            targetHeight = math.max(targetHeight, minHeight)
             
             DropdownHolderCanvas.Size = UDim2.fromOffset(ListSizeX, targetHeight)
             DropdownHolderFrame.Size = UDim2.fromScale(1, many and 0.6 or 1)
         end
+
+
 
         local function RecalculateCanvasSize()
             DropdownScrollFrame.CanvasSize = UDim2.fromOffset(0, DropdownListLayout.AbsoluteContentSize.Y)
