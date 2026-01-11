@@ -3900,7 +3900,7 @@ ElementsTable.Dropdown = (function()
             Values = Config.Values,
             Value = Config.Default,
             Multi = Config.Multi,
-            Buttons = {}, -- Cache untuk object button
+            Buttons = {},
             Opened = false,
             Type = "Dropdown",
             Callback = Config.Callback or function() end,
@@ -4067,7 +4067,8 @@ ElementsTable.Dropdown = (function()
                             element.Visible = text == "" or value:lower():find(text, 1, true) ~= nil
                         end
                     end
-                    -- Recalculate called by signals below
+                    RecalculateCanvasSize()
+                    RecalculateListSize()
                 end)
             end
 
@@ -4133,6 +4134,7 @@ ElementsTable.Dropdown = (function()
             local totalCount = 0
             local visibleCount = 0
             
+            -- Count total and visible items
             for _, element in next, DropdownScrollFrame:GetChildren() do
                 if not element:IsA("UIListLayout") then
                     totalCount = totalCount + 1
@@ -4147,11 +4149,14 @@ ElementsTable.Dropdown = (function()
             local searchBarHeight = Dropdown.Search and 38 or 0
             local topBottomMargin = 10
             
+            -- Calculate content height based on visible items
             local itemsToShow = math.max(visibleCount, 1)
             local contentHeight = itemsToShow * itemHeight + math.max(0, itemsToShow - 1) * padding
             
+            -- Total height including search bar and margins
             local totalHeight = searchBarHeight + contentHeight + topBottomMargin
             
+            -- Clamp between min and max
             local minHeight = searchBarHeight + itemHeight + topBottomMargin + 20
             local maxHeight = 392
             local targetHeight = math.clamp(totalHeight, minHeight, maxHeight)
@@ -4221,6 +4226,7 @@ ElementsTable.Dropdown = (function()
             end
         end)
 
+        local ScrollFrame = self.ScrollFrame
         function Dropdown:Open()
             Dropdown.Opened = true
             for _, frame in ipairs(Library.OpenFrames) do
@@ -4282,9 +4288,11 @@ ElementsTable.Dropdown = (function()
         function Dropdown:GetActiveValues()
             if Config.Multi then
                 local T = {}
+
                 for Value, Bool in next, Dropdown.Value do
                     table.insert(T, Value)
                 end
+
                 return T
             else
                 return Dropdown.Value and 1 or 0
@@ -4293,34 +4301,30 @@ ElementsTable.Dropdown = (function()
 
         function Dropdown:SetActiveValues(Value)
             Dropdown.Value = Value
+
             Library:SafeCallback(Dropdown.Callback, Dropdown.Value)
             Library:SafeCallback(Dropdown.Changed, Dropdown.Value)
-            
-            -- Update UI for active buttons
-            for _, ButtonTable in pairs(Dropdown.Buttons) do
-                ButtonTable:UpdateButton()
-            end
-            Dropdown:Display()
+
+            Dropdown:BuildDropdownList()
         end
 
-        -- OPTIMIZED BUILD FUNCTION
         function Dropdown:BuildDropdownList()
             local Values = Dropdown.Values
-            
-            -- Clean up buttons that are NOT in the new Values list
-            for Value, ButtonTable in pairs(Dropdown.Buttons) do
-                if not table.find(Values, Value) then
-                    ButtonTable.Instance:Destroy()
-                    Dropdown.Buttons[Value] = nil
+            local Buttons = {}
+
+            for _, Element in next, DropdownScrollFrame:GetChildren() do
+                if not Element:IsA("UIListLayout") then
+                    Element:Destroy()
                 end
             end
 
-            -- Create new buttons only if they don't exist
-            for Idx, Value in next, Values do
-                if Dropdown.Buttons[Value] then continue end -- Skip if already exists!
+            local Count = 0
 
+            for Idx, Value in next, Values do
                 local Table = {}
-                
+
+                Count = Count + 1
+
                 local ButtonSelector = New("Frame", {
                     Size = UDim2.fromOffset(4, 14),
                     BackgroundColor3 = Color3.fromRGB(76, 194, 255),
@@ -4353,7 +4357,6 @@ ElementsTable.Dropdown = (function()
                 })
 
                 local Button = New("TextButton", {
-                    Name = Value, -- Name it for debugging
                     Size = UDim2.new(1, -5, 0, 32),
                     BackgroundTransparency = 1,
                     ZIndex = 23,
@@ -4413,8 +4416,7 @@ ElementsTable.Dropdown = (function()
                     SelectorSizeMotor:setGoal(Flipper.Spring.new(Selected and 14 or 6, { frequency = 6 }))
                     SetSelTransparency(Selected and 0 or 1)
                 end
-
-                Creator.AddSignal(Button.Activated, function()
+                AddSignal(Button.Activated, function()
                     local Try = not Selected
 
                     if Dropdown:GetActiveValues() == 1 and not Try and not Config.AllowNull then
@@ -4426,12 +4428,13 @@ ElementsTable.Dropdown = (function()
                             Selected = Try
                             Dropdown.Value = Selected and Value or nil
 
-                            for _, OtherButton in pairs(Dropdown.Buttons) do
+                            for _, OtherButton in next, Buttons do
                                 OtherButton:UpdateButton()
                             end
                         end
 
                         Table:UpdateButton()
+
                         Dropdown:Display()
 
                         Library:SafeCallback(Dropdown.Callback, Dropdown.Value)
@@ -4440,17 +4443,14 @@ ElementsTable.Dropdown = (function()
                 end)
 
                 Table:UpdateButton()
-                
-                -- Cache the button
-                Table.Instance = Button
-                Dropdown.Buttons[Value] = Table
+                Dropdown:Display()
+
+                Buttons[Button] = Table
             end
 
-            -- Recalculate Width
             ListSizeX = 0
-            for _, Table in pairs(Dropdown.Buttons) do
-                local Button = Table.Instance
-                if Button and Button.ButtonLabel then
+            for Button, Table in next, Buttons do
+                if Button.ButtonLabel then
                     if Button.ButtonLabel.TextBounds.X > ListSizeX then
                         ListSizeX = Button.ButtonLabel.TextBounds.X
                     end
@@ -4466,6 +4466,7 @@ ElementsTable.Dropdown = (function()
             if NewValues then
                 Dropdown.Values = NewValues
             end
+
             Dropdown:BuildDropdownList()
         end
 
@@ -4477,11 +4478,13 @@ ElementsTable.Dropdown = (function()
         function Dropdown:SetValue(Val)
             if Dropdown.Multi then
                 local nTable = {}
+
                 for Value, Bool in next, Val do
                     if table.find(Dropdown.Values, Value) then
                         nTable[Value] = true
                     end
                 end
+
                 Dropdown.Value = nTable
             else
                 if not Val then
@@ -4490,12 +4493,9 @@ ElementsTable.Dropdown = (function()
                     Dropdown.Value = Val
                 end
             end
-            
-            -- Update UI
-            for _, ButtonTable in pairs(Dropdown.Buttons) do
-                ButtonTable:UpdateButton()
-            end
-            
+
+            Dropdown:BuildDropdownList()
+
             Library:SafeCallback(Dropdown.Callback, Dropdown.Value)
             Library:SafeCallback(Dropdown.Changed, Dropdown.Value)
         end
@@ -4534,13 +4534,13 @@ ElementsTable.Dropdown = (function()
                 else
                     Dropdown.Value = Dropdown.Values[Index]
                 end
-                if not Config.Multi then break end
+
+                if not Config.Multi then
+                    break
+                end
             end
-            
-            -- Update buttons after defaults are set
-            for _, ButtonTable in pairs(Dropdown.Buttons) do
-                ButtonTable:UpdateButton()
-            end
+
+            Dropdown:BuildDropdownList()
             Dropdown:Display()
         end
 
@@ -4549,6 +4549,28 @@ ElementsTable.Dropdown = (function()
     end
 
     return Element
+end)()
+ElementsTable.Paragraph = (function()
+    local Paragraph = {}
+    Paragraph.__index = Paragraph
+    Paragraph.__type = "Paragraph"
+
+    function Paragraph:New(Config)
+        Config.Content = Config.Content or ""
+
+        local Paragraph = Components.Element(Config.Title, Config.Content, Paragraph.Container, false, Config)
+        Paragraph.Frame.BackgroundTransparency = 0.92
+        Paragraph.Border.Transparency = 0.6
+
+        Paragraph.SetTitle = Paragraph.SetTitle
+        Paragraph.SetDesc = Paragraph.SetDesc
+        Paragraph.Visible = Paragraph.Visible
+        Paragraph.Elements = Paragraph
+
+        return Paragraph
+    end
+
+    return Paragraph
 end)()
 ElementsTable.Slider = (function()
     local Element = {}
