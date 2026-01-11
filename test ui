@@ -3894,11 +3894,11 @@ ElementsTable.Dropdown = (function()
     Element.__type = "Dropdown"
     local New = Creator.New
 
-    -- KONFIGURASI KECEPATAN LOAD
-    -- Semakin kecil angkanya, semakin ringan (tidak lag), tapi loading selesai lebih lama.
-    -- Semakin besar, semakin cepat selesai, tapi bisa bikin freeze sesaat.
-    local BUTTONS_PER_FRAME = 5 
-    local SEARCH_CHECKS_PER_FRAME = 20
+    -- KONFIGURASI KECEPATAN (Sangat Lambat & Halus)
+    -- Angka 3 berarti script membuat 3 tombol, lalu istirahat.
+    -- Kamu bisa ubah jadi 1, 2, 3, 4, atau 5.
+    local BUTTONS_PER_FRAME = 3 
+    local SEARCH_CHECKS_PER_FRAME = 15 -- Pengecekan search per frame
 
     function Element:New(Idx, Config)
         local Dropdown = {
@@ -4061,7 +4061,7 @@ ElementsTable.Dropdown = (function()
                             local isMatch = text == "" or value:lower():find(text, 1, true) ~= nil
                             element.Visible = isMatch
                             
-                            -- Jeda setiap 20 pengecekan agar search tidak lag
+                            -- Jeda setiap 15 pengecekan
                             count = count + 1
                             if count % SEARCH_CHECKS_PER_FRAME == 0 then 
                                 task.wait() 
@@ -4236,9 +4236,8 @@ ElementsTable.Dropdown = (function()
             Dropdown:Display()
         end
 
-        -- ==== SUPER OPTIMIZED ASYNC BUILDER (5 BUTTONS PER FRAME) ====
+        -- ==== SUPER OPTIMIZED ASYNC BUILDER (3 BUTTONS PER FRAME) ====
         function Dropdown:BuildDropdownList()
-            -- Token System untuk membatalkan load lama jika ada load baru
             Dropdown.LoadToken = Dropdown.LoadToken + 1
             local MyToken = Dropdown.LoadToken
 
@@ -4260,10 +4259,8 @@ ElementsTable.Dropdown = (function()
                 local processedCount = 0
                 
                 for _, Value in ipairs(Values) do
-                    -- Stop jika user menutup/merefresh dropdown lagi
                     if MyToken ~= Dropdown.LoadToken then return end
 
-                    -- Skip jika tombol sudah ada
                     if Dropdown.Buttons[Value] then 
                         processedCount = processedCount + 1
                         continue 
@@ -4320,16 +4317,15 @@ ElementsTable.Dropdown = (function()
                     Table.Instance = Button
                     Dropdown.Buttons[Value] = Table
                     
-                    -- LOGIC PENTING: HANYA 5 TOMBOL PER FRAME
+                    -- LOGIC "1-5 PER FRAME"
                     processedCount = processedCount + 1
                     if processedCount % BUTTONS_PER_FRAME == 0 then
-                        RecalculateCanvasSize() -- Update scrollbar pelan-pelan
-                        task.wait() -- Istirahat 1 frame
+                        RecalculateCanvasSize()
+                        task.wait() -- Istirahat 1 Frame setelah membuat 3 tombol
                     end
                 end
                 
                 if MyToken == Dropdown.LoadToken then
-                    -- Final Width Calc
                     ListSizeX = 0
                     for _, Table in pairs(Dropdown.Buttons) do
                         local b = Table.Instance
