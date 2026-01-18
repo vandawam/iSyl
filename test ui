@@ -1506,30 +1506,52 @@ function AcrylicBlur()
         end
 
         local function render()
-            local res = game:GetService("Workspace").CurrentCamera
+            -- [1] Validasi Camera (Sama seperti aslinya)
+            local currentCam = game:GetService("Workspace").CurrentCamera
+            local res = currentCam
             if res then
                 res = res.CFrame
             end
+            
             local cond = res
             if not cond then
                 cond = CFrame.new()
             end
-
+        
             local camera = cond
             local topLeft = positions.topLeft
             local topRight = positions.topRight
             local bottomRight = positions.bottomRight
-
+        
+            -- [2] Kalkulasi Posisi 3D (Sama seperti aslinya)
+            -- Pastikan fungsi 'viewportPointToWorld' dan variabel 'distance' sudah ada di scope script ini
             local topLeft3D = viewportPointToWorld(topLeft, distance)
             local topRight3D = viewportPointToWorld(topRight, distance)
             local bottomRight3D = viewportPointToWorld(bottomRight, distance)
-
+        
             local width = (topRight3D - topLeft3D).Magnitude
             local height = (topRight3D - bottomRight3D).Magnitude
-
-            model.CFrame =
-                CFrame.fromMatrix((topLeft3D + bottomRight3D) / 2, camera.XVector, camera.YVector, camera.ZVector)
-            model.Mesh.Scale = Vector3.new(width, height, 0)
+        
+            -- [3] Update Posisi Model
+            -- Kita bungkus update CFrame dalam pcall jaga-jaga jika 'model' sudah destroy
+            pcall(function()
+                model.CFrame = CFrame.fromMatrix((topLeft3D + bottomRight3D) / 2, camera.XVector, camera.YVector, camera.ZVector)
+            end)
+        
+            -- [4] PERBAIKAN UTAMA (ANTI-CRASH)
+            -- Cek dulu apakah di dalam model ada anak bernama "Mesh"
+            local mesh = model:FindFirstChild("Mesh")
+        
+            if mesh then
+                -- Jika ada Mesh, ubah Scale mesh-nya (Cara Lama)
+                mesh.Scale = Vector3.new(width, height, 0)
+            else
+                -- Jika TIDAK ada Mesh, ubah Size part-nya langsung (Fallback)
+                -- Ini mencegah script error "not a valid member"
+                if model:IsA("BasePart") then
+                    model.Size = Vector3.new(width, height, 0.001) -- Tebal tipis aja
+                end
+            end
         end
 
         local function onChange(rbx)
