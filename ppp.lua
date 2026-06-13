@@ -91,7 +91,7 @@ local function FindNextMoonSchedule(targetWeather, isDiscord)
                 elseif offset == 0 then
                     return "Siklus ini! (<t:" .. targetUnixTime .. ":R>)"
                 else
-                    return "Dalam " .. offset .. " Siklus (<t:" .. targetUnixTime .. ":R>)"
+                    return offset .. " Siklus (<t:" .. targetUnixTime .. ":R>)"
                 end
             else
                 if timeUntil < 0 then
