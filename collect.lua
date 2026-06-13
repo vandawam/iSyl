@@ -14,12 +14,35 @@ repeat task.wait() until game:IsLoaded()
 
 local Networking = require(ReplicatedStorage:WaitForChild("SharedModules"):WaitForChild("Networking"))
 
--- 1. Anti-AFK
+-- 1. Anti-AFK (Sama persis seperti di gag.lua)
+pcall(function()
+    if getconnections then
+        for _, connection in pairs(getconnections(LocalPlayer.Idled)) do
+            if type(connection) == "table" and connection.Disable then
+                connection:Disable()
+            end
+        end
+    end
+end)
+
 LocalPlayer.Idled:Connect(function()
-    VirtualUser:Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
-    task.wait(1)
-    VirtualUser:Button2Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
-    print("[Anti-AFK] Berhasil mencegah tendangan AFK.")
+    pcall(function()
+        VirtualUser:CaptureController()
+        VirtualUser:ClickButton2(Vector2.new())
+        VirtualUser:Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+        task.wait(1)
+        VirtualUser:Button2Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+        print("[Anti-AFK] Mencegah tendangan AFK Roblox (Idled Event).")
+    end)
+end)
+
+-- Custom Game Anti-AFK Bypass (Membobol AntiAfkController.lua milik Grow a Garden)
+task.spawn(function()
+    while task.wait(5) do
+        pcall(function()
+            LocalPlayer:SetAttribute("AntiAfkIdleOverride", 9e9)
+        end)
+    end
 end)
 
 -- 2. Auto Collect Drops (Looping tanpa batas)
