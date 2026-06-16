@@ -46,6 +46,7 @@ end
 local totalDuration = 600
 local cyclesObserved = 0
 local SAVE_FILE = "Napo_CycleTracker_" .. tostring(game.JobId) .. ".json"
+local LOG_FILE = "Napo_CycleHistory.txt"
 
 local HttpService = game:GetService("HttpService")
 
@@ -57,6 +58,23 @@ local function saveTrackerData()
                 cycles = cyclesObserved
             }
             writefile(SAVE_FILE, HttpService:JSONEncode(data))
+        end
+    end)
+end
+
+local function logCycleToHistory(dayID, weather)
+    pcall(function()
+        local timestamp = os.date("%Y-%m-%d %H:%M:%S")
+        local logText = string.format("[%s] JobId: %s | DayID: %d | Weather: %s\n", timestamp, tostring(game.JobId), dayID, weather)
+        
+        if appendfile then
+            appendfile(LOG_FILE, logText)
+        elseif readfile and writefile then
+            local existing = ""
+            if isfile and isfile(LOG_FILE) then
+                existing = readfile(LOG_FILE)
+            end
+            writefile(LOG_FILE, existing .. logText)
         end
     end)
 end
@@ -273,30 +291,37 @@ local function processNightWeather(actualWeather)
     print("[SeedTracker] Cycle " .. cyclesObserved .. " -> " .. actualWeather)
     print("[SeedTracker] Remaining possibilities: " .. #possibleConfigs)
     
+    logCycleToHistory(currentDayID, actualWeather)
     saveTrackerData()
     updateUI()
 end
 
--- Hook into workspace attributes
-workspace:GetAttributeChangedSignal("ActivePhase"):Connect(function()
+local lastProcessedDayID = -1
+local validNightWeathers = {
+    ["Moon"] = true,
+    ["Bloodmoon"] = true,
+    ["Goldmoon"] = true,
+    ["Rainbow Moon"] = true
+}
+
+local function onWeatherOrPhaseChanged()
     local phase = workspace:GetAttribute("ActivePhase")
-    if phase == "Night" then
-        -- Wait a tiny bit to ensure ActiveWeather is set
-        task.wait(1)
-        local liveWeather = workspace:GetAttribute("ActiveWeather")
-        if liveWeather then
+    local liveWeather = workspace:GetAttribute("ActiveWeather")
+    
+    if phase == "Night" and validNightWeathers[liveWeather] then
+        local currentDayID = math.floor(os.time() / totalDuration)
+        if currentDayID ~= lastProcessedDayID then
+            lastProcessedDayID = currentDayID
             processNightWeather(liveWeather)
         end
     end
-end)
+end
+
+-- Hook into workspace attributes
+workspace:GetAttributeChangedSignal("ActivePhase"):Connect(onWeatherOrPhaseChanged)
+workspace:GetAttributeChangedSignal("ActiveWeather"):Connect(onWeatherOrPhaseChanged)
 
 -- If we start while Night is already active, process it immediately
-local currentPhase = workspace:GetAttribute("ActivePhase")
-if currentPhase == "Night" then
-    local liveWeather = workspace:GetAttribute("ActiveWeather")
-    if liveWeather then
-        processNightWeather(liveWeather)
-    end
-end
+onWeatherOrPhaseChanged()
 
 print("[SeedTracker] Initialized! 96 possible configs. Waiting for data...")
