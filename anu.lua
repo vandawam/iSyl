@@ -35,12 +35,13 @@ local basePerms = getPermutations(weathers)
 local possibleConfigs = {}
 
 -- Create a configuration for every permutation and every RNG mode we suspect
--- This guarantees we crack the server's exact random generation logic.
 for _, perm in ipairs(basePerms) do
-    table.insert(possibleConfigs, {Order = perm, Mode = "Float1"})
-    table.insert(possibleConfigs, {Order = perm, Mode = "Float2"})
-    table.insert(possibleConfigs, {Order = perm, Mode = "Int1"})
-    table.insert(possibleConfigs, {Order = perm, Mode = "Int2"})
+    for dayOff = -1, 1 do
+        for phaseOff = 1, 5 do
+            table.insert(possibleConfigs, {Order = perm, Mode = "Float1", DayOffset = dayOff, PhaseOffset = phaseOff})
+            table.insert(possibleConfigs, {Order = perm, Mode = "Float2", DayOffset = dayOff, PhaseOffset = phaseOff})
+        end
+    end
 end
 
 local totalDuration = 600
@@ -85,9 +86,13 @@ local function loadTrackerData()
             local content = readfile(SAVE_FILE)
             local data = HttpService:JSONDecode(content)
             if data and data.configs and data.cycles then
-                possibleConfigs = data.configs
-                cyclesObserved = data.cycles
-                print("[SeedTracker] Loaded past data for this server! Cycles: " .. cyclesObserved)
+                if #data.configs > 0 then
+                    possibleConfigs = data.configs
+                    cyclesObserved = data.cycles
+                    print("[SeedTracker] Loaded past data for this server! Cycles: " .. cyclesObserved)
+                else
+                    print("[SeedTracker] Previous save had 0 configs. Starting fresh.")
+                end
             end
         end
     end)
@@ -151,7 +156,7 @@ ordersLabel.TextColor3 = Color3.new(1, 1, 1)
 ordersLabel.Font = Enum.Font.Gotham
 ordersLabel.TextSize = 14
 ordersLabel.TextXAlignment = Enum.TextXAlignment.Left
-ordersLabel.Text = "Remaining Configs: 96"
+ordersLabel.Text = "Remaining Configs: " .. #possibleConfigs
 ordersLabel.Parent = frame
 
 local statusLabel = Instance.new("TextLabel")
@@ -209,18 +214,19 @@ local function predictFuture(configsList)
     local predictions = {}
     
     for offset = 1, 100 do
-        local checkDayID = currentDayID + offset
-        local seed = (checkDayID * 1000) + 3
-        
-        -- Use the first config's prediction as the baseline
         local baselineConfig = configsList[1]
+        local checkDayID = currentDayID + offset + baselineConfig.DayOffset
+        local seed = (checkDayID * 1000) + baselineConfig.PhaseOffset
+        
         local baselineRoll = generateRollValue(seed, baselineConfig.Mode)
         local firstPredicted = simulateRoll(baselineConfig.Order, baselineRoll)
         
         local allAgree = true
         for i = 2, #configsList do
             local cfg = configsList[i]
-            local roll = generateRollValue(seed, cfg.Mode)
+            local cCheckDay = currentDayID + offset + cfg.DayOffset
+            local cSeed = (cCheckDay * 1000) + cfg.PhaseOffset
+            local roll = generateRollValue(cSeed, cfg.Mode)
             if simulateRoll(cfg.Order, roll) ~= firstPredicted then
                 allAgree = false
                 break
@@ -273,13 +279,13 @@ end
 updateUI()
 
 local function processNightWeather(actualWeather)
-    local currentDayID = math.floor(os.time() / totalDuration)
-    local seed = (currentDayID * 1000) + 3
-    
+    local rawDayID = math.floor(os.time() / totalDuration)
     cyclesObserved = cyclesObserved + 1
     
     local validConfigs = {}
     for _, cfg in ipairs(possibleConfigs) do
+        local testDayID = rawDayID + cfg.DayOffset
+        local seed = (testDayID * 1000) + cfg.PhaseOffset
         local rollValue = generateRollValue(seed, cfg.Mode)
         local predicted = simulateRoll(cfg.Order, rollValue)
         if predicted == actualWeather then
@@ -324,4 +330,4 @@ workspace:GetAttributeChangedSignal("ActiveWeather"):Connect(onWeatherOrPhaseCha
 -- If we start while Night is already active, process it immediately
 onWeatherOrPhaseChanged()
 
-print("[SeedTracker] Initialized! 96 possible configs. Waiting for data...")
+print("[SeedTracker] Initialized! " .. #possibleConfigs .. " possible configs. Waiting for data...")
