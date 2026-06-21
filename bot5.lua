@@ -113,40 +113,53 @@ end
 print("\n🚀 Memulai Watchdog & Delta Scanner...")
 
 -- ==========================================
--- 4. MAIN LOOP (WATCHDOG)
+-- 4. MAIN LOOP (WATCHDOG & DEBUG SCANNER)
 -- ==========================================
 while true do
     local is_running = execute_command("pidof " .. pkg)
 
     if is_running == "" then
-        print("❌ Offline! Melakukan auto-join ke PS...")
-        os.execute("am start -W -a android.intent.action.VIEW -d '" .. ps_link .. "' " .. pkg .. " > /dev/null 2>&1")
+        print("❌ Offline! Melakukan auto-join ke PS (Freeform Mode)...")
+        -- Menambahkan flag --windowingMode 5 untuk mode jendela
+        os.execute("am start -W --windowingMode 5 -a android.intent.action.VIEW -d '" .. ps_link .. "' " .. pkg .. " > /dev/null 2>&1")
         
-        -- Memberikan waktu lebih agar proses join selesai sebelum memindai
+        -- Waktu tunggu sebelum mulai memindai
         os.execute("sleep 20")
     else
         print("✅ Online (PID: " .. is_running .. "). Memindai Delta...")
         
         os.execute("rm -f /sdcard/delta_scan.xml")
-        os.execute("uiautomator dump /sdcard/delta_scan.xml > /dev/null 2>&1")
         
-        local has_key = execute_command("grep -i 'Get Key' /sdcard/delta_scan.xml")
+        -- MENGHAPUS > /dev/null 2>&1 AGAR ERROR UIAUTOMATOR TERLIHAT DI TERMINAL
+        print("⏳ [DEBUG] Mengambil dump UI layar...")
+        os.execute("uiautomator dump /sdcard/delta_scan.xml")
         
-        if has_key ~= "" then
-            print("⚠️ DELTA MEMBUTUHKAN KEY! Mengirim ke Discord...")
-            
-            -- Menyusun perintah curl dengan string format yang aman
-            local curl_cmd = string.format(
-                [[curl -s -H "Content-Type: application/json" -X POST -d '{"content": "🚨 **Delta Butuh Key!**\nSilakan isi manual untuk aplikasi `%s`."}' '%s' > /dev/null]],
-                pkg, webhook
-            )
-            os.execute(curl_cmd)
-            
-            print("📨 Notifikasi terkirim. Jeda pemindaian 3 menit...")
-            os.execute("sleep 180")
-        else
-            -- Interval reguler jika aman
+        -- Mengecek apakah file dump berhasil dibuat dan isinya tidak kosong
+        local file_size = execute_command("stat -c%s /sdcard/delta_scan.xml 2>/dev/null")
+        
+        if file_size == "" or tonumber(file_size) < 100 then
+            print("❌ [DEBUG] GAGAL! uiautomator tidak dapat membaca layar (File kosong).")
+            print("💡 Solusi: uiautomator mungkin timeout karena animasi game.")
             os.execute("sleep 15")
+        else
+            local has_key = execute_command("grep -i 'Get Key' /sdcard/delta_scan.xml")
+            
+            if has_key ~= "" then
+                print("⚠️ DELTA MEMBUTUHKAN KEY! Mengirim ke Discord...")
+                
+                local curl_cmd = string.format(
+                    [[curl -s -H "Content-Type: application/json" -X POST -d '{"content": "🚨 **Delta Butuh Key!**\nSilakan isi manual untuk aplikasi `%s`."}' '%s' > /dev/null]],
+                    pkg, webhook
+                )
+                os.execute(curl_cmd)
+                
+                print("📨 Notifikasi terkirim. Jeda pemindaian 3 menit...")
+                os.execute("sleep 180")
+            else
+                print("🔍 [DEBUG] Dump berhasil, tapi teks 'Get Key' tidak ditemukan di layar saat ini.")
+                -- Jika dump berhasil tapi tidak ketemu, kemungkinan UI Delta tidak terbaca (OpenGL/SurfaceView)
+                os.execute("sleep 15")
+            end
         end
     end
 end
