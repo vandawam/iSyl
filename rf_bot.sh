@@ -40,8 +40,8 @@ if [ -f "$CONFIG_FILE" ]; then
     echo -e "🔗 PS Link: ${YELLOW}$PS_LINK${NC}"
 else
     echo -e "${YELLOW}⚙️ SETUP PERTAMA KALI${NC}"
-    echo -n -e "🔍 Masukkan kata kunci aplikasi (contoh: roblox): "
-    read keyword </dev/tty
+    echo -e "🔍 Masukkan kata kunci aplikasi (contoh: roblox): "
+    read keyword
 
     echo -e "⏳ Memindai..."
     # Mengeksekusi pencarian package menggunakan akses root
@@ -59,8 +59,8 @@ else
         echo "  [$((i+1))] ${pkg_array[$i]}"
     done
 
-    echo -n -e "👉 Ketik nomor pilihan Anda: "
-    read choice </dev/tty
+    echo -e "👉 Ketik nomor pilihan Anda: "
+    read choice
 
     # Validasi input angka
     if ! [[ "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -lt 1 ] || [ "$choice" -gt "${#pkg_array[@]}" ]; then
@@ -71,11 +71,11 @@ else
     PKG="${pkg_array[$((choice-1))]}"
     echo -e "${GREEN}✅ Terpilih: $PKG${NC}"
     
-    echo -n -e "\n🔗 Masukkan URL Private Server:\n> "
-    read PS_LINK </dev/tty
+    echo -e "\n🔗 Masukkan URL Private Server: "
+    read PS_LINK
 
-    echo -n -e "\n💬 Masukkan URL Webhook Discord:\n> "
-    read WEBHOOK_URL </dev/tty
+    echo -e "\n💬 Masukkan URL Webhook Discord: "
+    read WEBHOOK_URL
 
     # Menyimpan variabel ke dalam file config di memori Termux
     echo "PKG=\"$PKG\"" > "$CONFIG_FILE"
