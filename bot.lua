@@ -1,18 +1,6 @@
 local config_file = "/sdcard/rf_config_lua.txt"
 
 -- Fungsi pembantu untuk menjalankan perintah shell dan mengambil hasilnya
-local function execute_command(cmd)
-    local f = io.popen(cmd)
-    local result = f:read("*a")
-    f:close()
-    return result:gsub("%s+", "") -- Membersihkan spasi atau enter tambahan
-end
-
-print("==========================================")
-print("   RF AUTO FARMING (LUA NATIVE ENGINE)    ")
-print("==========================================")
-
--- Memblokir jika belum Root
 -- Tambahkan ini di paling atas skrip
 local function run_as_root(cmd)
     return execute_command("tsu -c '" .. cmd .. "'")
@@ -23,6 +11,17 @@ if execute_command("id -u") ~= "0" then
     print("🚀 Meminta akses Root via tsu...")
     -- Jika belum root, skrip akan memanggil dirinya sendiri melalui tsu
     os.execute("tsu -c 'lua " .. arg[0] .. "'")
+    os.exit()
+end
+
+print("==========================================")
+print("   RF AUTO FARMING (LUA NATIVE ENGINE)    ")
+print("==========================================")
+
+-- Memblokir jika belum Root
+if execute_command("whoami") ~= "root" then
+    print("❌ Skrip gagal! Wajib dijalankan dalam mode Root.")
+    print("Ketik 'su' lalu tekan Enter, baru jalankan 'lua bot.lua'")
     os.exit()
 end
 
