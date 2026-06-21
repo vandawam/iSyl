@@ -119,9 +119,40 @@ while true do
     local is_running = execute_command("pidof " .. pkg)
 
     if is_running == "" then
-        print("❌ Offline! Melakukan auto-join ke PS (Freeform Mode)...")
-        -- Menambahkan flag --windowingMode 5 untuk mode jendela
-        os.execute("am start -W --windowingMode 5 -a android.intent.action.VIEW -d '" .. ps_link .. "' " .. pkg .. " > /dev/null 2>&1")
+        print("❌ Offline! Melakukan auto-join ke PS (Freeform 50% Tengah)...")
+        
+        -- 1. Paksa sistem Android mengizinkan mode Freeform & Resizable
+        os.execute("settings put global enable_freeform_support 1")
+        os.execute("settings put global force_resizable_activities 1")
+
+        -- 2. Mengambil resolusi layar saat ini secara dinamis
+        local wm_size = execute_command("wm size")
+        -- Output biasanya: "Physicalsize:1080x1920" (karena spasi sudah dihapus fungsi execute_command)
+        local w_str, h_str = wm_size:match("(%d+)x(%d+)")
+        local bounds_cmd = ""
+        
+        if w_str and h_str then
+            local w = tonumber(w_str)
+            local h = tonumber(h_str)
+            
+            -- Kalkulasi untuk ukuran 50% di tengah layar
+            -- Mulai dari 1/4 layar (kiri/atas) dan berakhir di 3/4 layar (kanan/bawah)
+            local left = math.floor(w / 4)
+            local top = math.floor(h / 4)
+            local right = math.floor(w * 0.75)
+            local bottom = math.floor(h * 0.75)
+            
+            bounds_cmd = "--bounds " .. left .. "," .. top .. "," .. right .. "," .. bottom
+        end
+
+        -- 3. Eksekusi am start dengan Flag Foreground & Bounds
+        -- -f 0x10000000 = FLAG_ACTIVITY_NEW_TASK (Wajib agar tidak lari ke background)
+        local start_cmd = string.format(
+            "am start -W -f 0x10000000 --windowingMode 5 %s -a android.intent.action.VIEW -d '%s' %s > /dev/null 2>&1",
+            bounds_cmd, ps_link, pkg
+        )
+        
+        os.execute(start_cmd)
         
         -- Waktu tunggu sebelum mulai memindai
         os.execute("sleep 20")
@@ -129,17 +160,13 @@ while true do
         print("✅ Online (PID: " .. is_running .. "). Memindai Delta...")
         
         os.execute("rm -f /sdcard/delta_scan.xml")
-        
-        -- MENGHAPUS > /dev/null 2>&1 AGAR ERROR UIAUTOMATOR TERLIHAT DI TERMINAL
         print("⏳ [DEBUG] Mengambil dump UI layar...")
         os.execute("uiautomator dump /sdcard/delta_scan.xml")
         
-        -- Mengecek apakah file dump berhasil dibuat dan isinya tidak kosong
         local file_size = execute_command("stat -c%s /sdcard/delta_scan.xml 2>/dev/null")
         
         if file_size == "" or tonumber(file_size) < 100 then
             print("❌ [DEBUG] GAGAL! uiautomator tidak dapat membaca layar (File kosong).")
-            print("💡 Solusi: uiautomator mungkin timeout karena animasi game.")
             os.execute("sleep 15")
         else
             local has_key = execute_command("grep -i 'Get Key' /sdcard/delta_scan.xml")
@@ -156,8 +183,7 @@ while true do
                 print("📨 Notifikasi terkirim. Jeda pemindaian 3 menit...")
                 os.execute("sleep 180")
             else
-                print("🔍 [DEBUG] Dump berhasil, tapi teks 'Get Key' tidak ditemukan di layar saat ini.")
-                -- Jika dump berhasil tapi tidak ketemu, kemungkinan UI Delta tidak terbaca (OpenGL/SurfaceView)
+                print("🔍 [DEBUG] Dump berhasil, tapi teks 'Get Key' tidak ditemukan.")
                 os.execute("sleep 15")
             end
         end
