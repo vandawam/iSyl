@@ -71,7 +71,7 @@ for choice in $choices; do
             fi
 
             echo "   ✅ Membuka $activity..."
-            am start --windowingMode 5 --bounds $bounds $activity > /dev/null 2>&1
+            am start --windowingMode 5 --bounds $bounds -n $activity
             counter=$((counter+1))
         fi
     else
